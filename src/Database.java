@@ -1,3 +1,5 @@
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -7,7 +9,11 @@ import java.util.Objects;
 /**
  * Управляет таблицами и связями между ними.
  */
-public final class Database {
+@SuppressWarnings("serial")
+public final class Database implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     /**
      * Описывает внешний ключ между двумя таблицами.
      *
@@ -20,7 +26,7 @@ public final class Database {
             String table,
             String column,
             String referencedTable,
-            String referencedColumn) {
+            String referencedColumn) implements Serializable {
         /**
          * Проверяет и нормализует описание внешнего ключа.
          *

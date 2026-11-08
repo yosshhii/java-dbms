@@ -20,8 +20,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $classPath = $mainClasses + [System.IO.Path]::PathSeparator + $testClasses
-& java -cp $classPath DatabaseTest
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Tests failed with exit code $LASTEXITCODE"
+foreach ($testFile in $testFiles) {
+    $testClass = [System.IO.Path]::GetFileNameWithoutExtension($testFile)
+    & java -cp $classPath $testClass
+    if ($LASTEXITCODE -ne 0) {
+        throw "$testClass failed with exit code $LASTEXITCODE"
+    }
 }

@@ -1,3 +1,5 @@
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,7 +14,11 @@ import java.util.Set;
 /**
  * Хранит схему таблицы и её строки в памяти.
  */
-public final class Table {
+@SuppressWarnings("serial")
+public final class Table implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     /**
      * Поддерживаемые типы значений столбцов.
      */
@@ -36,7 +42,7 @@ public final class Table {
      * @param type тип данных
      * @param required признак обязательного значения
      */
-    public record Column(String name, DataType type, boolean required) {
+    public record Column(String name, DataType type, boolean required) implements Serializable {
         /**
          * Проверяет и нормализует описание столбца.
          *

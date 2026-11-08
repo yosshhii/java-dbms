@@ -1,0 +1,51 @@
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.Map;
+
+/**
+ * Проверяет сохранение и восстановление базы данных.
+ */
+public final class StorageTest {
+    private StorageTest() {
+    }
+
+    /**
+     * Запускает проверку файлового хранения.
+     *
+     * @param args аргументы командной строки
+     * @throws Exception при ошибке работы с временным файлом
+     */
+    public static void main(String[] args) throws Exception {
+        Path directory = Files.createTempDirectory("simple-dbms-test-");
+        Path file = directory.resolve("database.bin");
+        try {
+            Database database = Database.createDefault();
+            database.insert("brands", Map.of("id", 1, "name", "Toyota"));
+            database.insert("cars", Map.of(
+                    "id", 10,
+                    "brand_id", 1,
+                    "model", "Camry",
+                    "price", 25_000.0,
+                    "manufactured", LocalDate.of(2024, 5, 20),
+                    "available", true));
+            Storage.save(database, file);
+            Database restored = Storage.load(file);
+            check(restored.getTable("brands").getRows().size() == 1);
+            check(restored.getTable("cars").getRows().size() == 1);
+            check(restored.getTable("cars").getRows().get(0).get("model").equals("Camry"));
+            check(Files.notExists(Path.of(file + ".tmp")));
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(Path.of(file + ".tmp"));
+            Files.deleteIfExists(directory);
+        }
+        System.out.println("Storage tests passed.");
+    }
+
+    private static void check(boolean condition) {
+        if (!condition) {
+            throw new AssertionError("Check failed");
+        }
+    }
+}

@@ -29,11 +29,16 @@ public final class StorageTest {
                     "price", 25_000.0,
                     "manufactured", LocalDate.of(2024, 5, 20),
                     "available", true));
+            database.createIndex("idx_cars_model", "cars", "model");
             Storage.save(database, file);
             Database restored = Storage.load(file);
             check(restored.getTable("brands").getRows().size() == 1);
             check(restored.getTable("cars").getRows().size() == 1);
             check(restored.getTable("cars").getRows().get(0).get("model").equals("Camry"));
+            check(restored.select(
+                    "cars",
+                    java.util.List.of(),
+                    new Table.Condition("model", Table.Operator.EQUALS, "Camry")).indexUsed());
             check(Files.notExists(Path.of(file + ".tmp")));
         } finally {
             Files.deleteIfExists(file);

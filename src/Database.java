@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Управляет таблицами и связями между ними.
+ * Управляет таблицами, связями и индексами базы данных.
  */
 @SuppressWarnings("serial")
 public final class Database implements Serializable {
@@ -82,6 +82,25 @@ public final class Database implements Serializable {
     }
 
     /**
+     * Удаляет пустую и не связанную таблицу.
+     *
+     * @param tableName имя таблицы
+     */
+    public void dropTable(String tableName) {
+        String normalizedName = Table.normalizeIdentifier(tableName);
+        Table table = getTable(normalizedName);
+        if (!table.getRows().isEmpty()) {
+            throw new IllegalArgumentException("Удалять можно только пустую таблицу");
+        }
+        boolean hasRelation = foreignKeys.stream().anyMatch(key ->
+                key.table().equals(normalizedName) || key.referencedTable().equals(normalizedName));
+        if (hasRelation) {
+            throw new IllegalArgumentException("Таблица участвует во внешнем ключе");
+        }
+        tables.remove(normalizedName);
+    }
+
+    /**
      * Добавляет связь по внешнему ключу.
      *
      * @param foreignKey описание связи
@@ -99,6 +118,9 @@ public final class Database implements Serializable {
         if (!referencedTable.getPrimaryKey().equals(foreignKey.referencedColumn())) {
             throw new IllegalArgumentException("Внешний ключ должен ссылаться на первичный ключ");
         }
+        if (foreignKeys.contains(foreignKey)) {
+            throw new IllegalArgumentException("Внешний ключ уже существует");
+        }
         foreignKeys.add(foreignKey);
     }
 
@@ -111,17 +133,83 @@ public final class Database implements Serializable {
     public void insert(String tableName, Map<String, Object> values) {
         String normalizedTableName = Table.normalizeIdentifier(tableName);
         Objects.requireNonNull(values, "Значения строки не заданы");
+        validateForeignKeyAssignments(normalizedTableName, values);
+        getTable(normalizedTableName).insert(values);
+    }
+
+    /**
+     * Выполняет выборку из таблицы.
+     *
+     * @param tableName имя таблицы
+     * @param columns выбранные столбцы
+     * @param condition условие или null
+     * @return результат выборки
+     */
+    public Table.QueryResult select(
+            String tableName,
+            List<String> columns,
+            Table.Condition condition) {
+        return getTable(tableName).select(columns, condition);
+    }
+
+    /**
+     * Обновляет строки таблицы с проверкой внешних ключей.
+     *
+     * @param tableName имя таблицы
+     * @param assignments новые значения
+     * @param condition условие или null
+     * @return количество обновлённых строк
+     */
+    public int update(
+            String tableName,
+            Map<String, Object> assignments,
+            Table.Condition condition) {
+        String normalizedTableName = Table.normalizeIdentifier(tableName);
+        validateForeignKeyAssignments(normalizedTableName, assignments);
+        return getTable(normalizedTableName).update(assignments, condition);
+    }
+
+    /**
+     * Удаляет строки с проверкой ссылочной целостности.
+     *
+     * @param tableName имя таблицы
+     * @param condition условие или null
+     * @return количество удалённых строк
+     */
+    public int delete(String tableName, Table.Condition condition) {
+        String normalizedTableName = Table.normalizeIdentifier(tableName);
+        Table table = getTable(normalizedTableName);
+        List<Map<String, Object>> selectedRows = table.select(List.of(), condition).rows();
         for (ForeignKey foreignKey : foreignKeys) {
-            if (!foreignKey.table().equals(normalizedTableName)) {
+            if (!foreignKey.referencedTable().equals(normalizedTableName)) {
                 continue;
             }
-            Object value = findValue(values, foreignKey.column());
-            if (value != null && !getTable(foreignKey.referencedTable())
-                    .containsValue(foreignKey.referencedColumn(), value)) {
-                throw new IllegalArgumentException("Нарушена связь по внешнему ключу");
+            Table referencingTable = getTable(foreignKey.table());
+            for (Map<String, Object> row : selectedRows) {
+                Object referencedValue = row.get(foreignKey.referencedColumn());
+                if (referencingTable.containsValue(foreignKey.column(), referencedValue)) {
+                    throw new IllegalArgumentException("Строка используется во внешнем ключе");
+                }
             }
         }
-        getTable(normalizedTableName).insert(values);
+        return table.delete(condition);
+    }
+
+    /**
+     * Создаёт индекс с уникальным в базе именем.
+     *
+     * @param indexName имя индекса
+     * @param tableName имя таблицы
+     * @param columnName имя столбца
+     */
+    public void createIndex(String indexName, String tableName, String columnName) {
+        String normalizedIndexName = Table.normalizeIdentifier(indexName);
+        for (Table table : tables.values()) {
+            if (table.hasIndex(normalizedIndexName)) {
+                throw new IllegalArgumentException("Индекс уже существует: " + indexName);
+            }
+        }
+        getTable(tableName).createIndex(normalizedIndexName, columnName);
     }
 
     /**
@@ -146,6 +234,35 @@ public final class Database implements Serializable {
      */
     public List<Table> getTables() {
         return List.copyOf(tables.values());
+    }
+
+    /**
+     * Возвращает снимок внешних ключей.
+     *
+     * @return внешние ключи
+     */
+    public List<ForeignKey> getForeignKeys() {
+        return List.copyOf(foreignKeys);
+    }
+
+    private void validateForeignKeyAssignments(String tableName, Map<String, Object> values) {
+        Objects.requireNonNull(values, "Значения не заданы");
+        for (ForeignKey foreignKey : foreignKeys) {
+            if (!foreignKey.table().equals(tableName) || !containsKey(values, foreignKey.column())) {
+                continue;
+            }
+            Object value = findValue(values, foreignKey.column());
+            if (value != null && !getTable(foreignKey.referencedTable())
+                    .containsValue(foreignKey.referencedColumn(), value)) {
+                throw new IllegalArgumentException("Нарушена связь по внешнему ключу");
+            }
+        }
+    }
+
+    private boolean containsKey(Map<String, Object> values, String columnName) {
+        return values.keySet().stream()
+                .map(Table::normalizeIdentifier)
+                .anyMatch(columnName::equals);
     }
 
     private Object findValue(Map<String, Object> values, String columnName) {

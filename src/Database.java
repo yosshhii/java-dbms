@@ -131,10 +131,22 @@ public final class Database implements Serializable {
      * @param values значения строки
      */
     public void insert(String tableName, Map<String, Object> values) {
+        insertAll(tableName, List.of(values));
+    }
+
+    /**
+     * Атомарно добавляет несколько строк в указанную таблицу.
+     *
+     * @param tableName имя таблицы
+     * @param valuesList добавляемые строки
+     */
+    public void insertAll(String tableName, List<Map<String, Object>> valuesList) {
         String normalizedTableName = Table.normalizeIdentifier(tableName);
-        Objects.requireNonNull(values, "Значения строки не заданы");
-        validateForeignKeyAssignments(normalizedTableName, values);
-        getTable(normalizedTableName).insert(values);
+        Objects.requireNonNull(valuesList, "Строки не заданы");
+        for (Map<String, Object> values : valuesList) {
+            validateForeignKeyAssignments(normalizedTableName, values);
+        }
+        getTable(normalizedTableName).insertAll(valuesList);
     }
 
     /**

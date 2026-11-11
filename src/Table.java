@@ -247,19 +247,40 @@ public final class Table implements Serializable {
      * @param values значения по именам столбцов
      */
     public void insert(Map<String, Object> values) {
-        Objects.requireNonNull(values, "Значения строки не заданы");
-        Map<String, Object> normalizedValues = normalizeKeys(values);
-        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-        for (Column column : columns) {
-            row.put(column.name(), column.normalizeValue(normalizedValues.get(column.name())));
+        insertAll(List.of(values));
+    }
+
+    /**
+     * Атомарно добавляет несколько строк.
+     *
+     * @param valuesList строки для добавления
+     */
+    public void insertAll(List<Map<String, Object>> valuesList) {
+        Objects.requireNonNull(valuesList, "Строки не заданы");
+        if (valuesList.isEmpty()) {
+            throw new IllegalArgumentException("Список строк пуст");
         }
-        Object keyValue = row.get(primaryKey);
-        if (primaryKeyValues.contains(keyValue)) {
-            throw new IllegalArgumentException("Первичный ключ уже существует: " + keyValue);
+        List<Map<String, Object>> preparedRows = new ArrayList<>();
+        Set<Object> preparedKeys = new HashSet<>(primaryKeyValues);
+        for (Map<String, Object> values : valuesList) {
+            Objects.requireNonNull(values, "Значения строки не заданы");
+            Map<String, Object> normalizedValues = normalizeKeys(values);
+            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+            for (Column column : columns) {
+                row.put(column.name(), column.normalizeValue(normalizedValues.get(column.name())));
+            }
+            Object keyValue = row.get(primaryKey);
+            if (!preparedKeys.add(keyValue)) {
+                throw new IllegalArgumentException("Первичный ключ уже существует: " + keyValue);
+            }
+            preparedRows.add(Collections.unmodifiableMap(row));
         }
-        primaryKeyValues.add(keyValue);
-        rows.add(Collections.unmodifiableMap(row));
-        addRowToIndexes(row);
+        for (Map<String, Object> row : preparedRows) {
+            Object keyValue = row.get(primaryKey);
+            primaryKeyValues.add(keyValue);
+            rows.add(row);
+            addRowToIndexes(row);
+        }
     }
 
     /**

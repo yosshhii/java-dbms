@@ -40,9 +40,18 @@ public final class StorageTest {
                     java.util.List.of(),
                     new Table.Condition("model", Table.Operator.EQUALS, "Camry")).indexUsed());
             check(Files.notExists(Path.of(file + ".tmp")));
+            restored.update(
+                    "cars",
+                    Map.of("model", "Corolla"),
+                    new Table.Condition("id", Table.Operator.EQUALS, 10));
+            Storage.save(restored, file);
+            Files.writeString(file, "broken");
+            Database recovered = Storage.load(file);
+            check(recovered.getTable("cars").getRows().get(0).get("model").equals("Camry"));
         } finally {
             Files.deleteIfExists(file);
             Files.deleteIfExists(Path.of(file + ".tmp"));
+            Files.deleteIfExists(Path.of(file + ".bak"));
             Files.deleteIfExists(directory);
         }
         System.out.println("Storage tests passed.");

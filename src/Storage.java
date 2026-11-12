@@ -27,6 +27,18 @@ public final class Storage {
         if (Files.notExists(file)) {
             return Database.createDefault();
         }
+        try {
+            return read(file);
+        } catch (IOException exception) {
+            Path backupFile = backupPath(file.toAbsolutePath());
+            if (Files.notExists(backupFile)) {
+                throw exception;
+            }
+            return read(backupFile);
+        }
+    }
+
+    private static Database read(Path file) throws IOException {
         try (ObjectInputStream input = new ObjectInputStream(Files.newInputStream(file))) {
             Object value = input.readObject();
             if (!(value instanceof Database database)) {
@@ -52,6 +64,7 @@ public final class Storage {
         Path parent = absoluteFile.getParent();
         Files.createDirectories(parent);
         Path temporaryFile = parent.resolve(absoluteFile.getFileName() + ".tmp");
+        Path backupFile = backupPath(absoluteFile);
         try (ObjectOutputStream output = new ObjectOutputStream(Files.newOutputStream(
                 temporaryFile,
                 StandardOpenOption.CREATE,
@@ -59,6 +72,9 @@ public final class Storage {
                 StandardOpenOption.WRITE))) {
             output.writeObject(database);
             output.flush();
+        }
+        if (Files.exists(absoluteFile)) {
+            Files.copy(absoluteFile, backupFile, StandardCopyOption.REPLACE_EXISTING);
         }
         try {
             Files.move(
@@ -69,5 +85,9 @@ public final class Storage {
         } catch (AtomicMoveNotSupportedException exception) {
             Files.move(temporaryFile, absoluteFile, StandardCopyOption.REPLACE_EXISTING);
         }
+    }
+
+    private static Path backupPath(Path file) {
+        return file.getParent().resolve(file.getFileName() + ".bak");
     }
 }

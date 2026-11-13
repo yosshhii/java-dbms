@@ -156,6 +156,7 @@ public final class Table implements Serializable {
     private final String primaryKey;
     private final List<Map<String, Object>> rows = new ArrayList<>();
     private final Set<Object> primaryKeyValues = new HashSet<>();
+    private final Map<Object, Map<String, Object>> rowsByPrimaryKey = new LinkedHashMap<>();
     private final Map<String, String> indexColumns = new LinkedHashMap<>();
     private final Map<String, Map<Object, Set<Object>>> indexes = new LinkedHashMap<>();
 
@@ -279,6 +280,7 @@ public final class Table implements Serializable {
             Object keyValue = row.get(primaryKey);
             primaryKeyValues.add(keyValue);
             rows.add(row);
+            rowsByPrimaryKey.put(keyValue, row);
             addRowToIndexes(row);
         }
     }
@@ -301,8 +303,9 @@ public final class Table implements Serializable {
                 indexUsed = true;
                 Set<Object> keys = indexes.get(indexName)
                         .getOrDefault(normalizedCondition.value(), Set.of());
-                source = rows.stream()
-                        .filter(row -> keys.contains(row.get(primaryKey)))
+                source = keys.stream()
+                        .map(rowsByPrimaryKey::get)
+                        .filter(Objects::nonNull)
                         .toList();
             }
         }
@@ -351,7 +354,9 @@ public final class Table implements Serializable {
             }
             LinkedHashMap<String, Object> changedRow = new LinkedHashMap<>(row);
             changedRow.putAll(checkedAssignments);
-            rows.set(index, Collections.unmodifiableMap(changedRow));
+            Map<String, Object> immutableRow = Collections.unmodifiableMap(changedRow);
+            rows.set(index, immutableRow);
+            rowsByPrimaryKey.put(immutableRow.get(primaryKey), immutableRow);
             updated++;
         }
         if (updated > 0) {
@@ -373,8 +378,10 @@ public final class Table implements Serializable {
         int deleted = sizeBefore - rows.size();
         if (deleted > 0) {
             primaryKeyValues.clear();
+            rowsByPrimaryKey.clear();
             for (Map<String, Object> row : rows) {
                 primaryKeyValues.add(row.get(primaryKey));
+                rowsByPrimaryKey.put(row.get(primaryKey), row);
             }
             rebuildIndexes();
         }

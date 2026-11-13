@@ -47,17 +47,37 @@ public final class SqlEngine {
      * @param output текст ответа
      * @param changed признак изменения базы
      * @param indexUsed признак применения индекса
+     * @param columns столбцы результата SELECT
+     * @param rows строки результата SELECT
      */
-    public record ExecutionResult(String output, boolean changed, boolean indexUsed) {
+    public record ExecutionResult(String output, boolean changed, boolean indexUsed,
+                                  List<String> columns, List<Map<String, Object>> rows) {
         /**
          * Создаёт результат выполнения команды.
          *
          * @param output текст ответа
          * @param changed признак изменения базы
          * @param indexUsed признак применения индекса
+         * @param columns столбцы результата SELECT
+         * @param rows строки результата SELECT
          */
         public ExecutionResult {
             Objects.requireNonNull(output, "Ответ не задан");
+            columns = List.copyOf(columns);
+            rows = rows.stream()
+                    .map(row -> java.util.Collections.unmodifiableMap(new LinkedHashMap<>(row)))
+                    .toList();
+        }
+
+        /**
+         * Создаёт результат команды без табличных данных.
+         *
+         * @param output текст ответа
+         * @param changed признак изменения базы
+         * @param indexUsed признак применения индекса
+         */
+        public ExecutionResult(String output, boolean changed, boolean indexUsed) {
+            this(output, changed, indexUsed, List.of(), List.of());
         }
     }
 
@@ -78,9 +98,7 @@ public final class SqlEngine {
      */
     public ExecutionResult execute(String sql) {
         String statement = normalizeStatement(sql);
-        String keyword = statement.substring(0, statement.indexOf(' ') > 0
-                ? statement.indexOf(' ')
-                : statement.length()).toUpperCase(Locale.ROOT);
+        String keyword = statement.split("\\s+", 2)[0].toUpperCase(Locale.ROOT);
         return switch (keyword) {
             case "INSERT" -> executeInsert(statement);
             case "SELECT" -> executeSelect(statement);
@@ -131,7 +149,7 @@ public final class SqlEngine {
         return new ExecutionResult(
                 formatTable(columns, queryResult.rows()),
                 false,
-                queryResult.indexUsed());
+                queryResult.indexUsed(), columns, queryResult.rows());
     }
 
     private ExecutionResult executeUpdate(String statement) {
@@ -242,6 +260,9 @@ public final class SqlEngine {
 
     private Object parseLiteral(String token, Table.DataType type) {
         String value = token.trim();
+        if (value.equalsIgnoreCase("NULL")) {
+            return null;
+        }
         try {
             return switch (type) {
                 case INTEGER -> Integer.valueOf(value);

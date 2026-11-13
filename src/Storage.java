@@ -25,6 +25,9 @@ public final class Storage {
     public static Database load(Path file) throws IOException {
         Objects.requireNonNull(file, "Путь к файлу не задан");
         if (Files.notExists(file)) {
+            if (Files.exists(backupPath(file.toAbsolutePath()))) {
+                return restoreBackup(file);
+            }
             return Database.createDefault();
         }
         try {
@@ -34,8 +37,15 @@ public final class Storage {
             if (Files.notExists(backupFile)) {
                 throw exception;
             }
-            return read(backupFile);
+            return restoreBackup(file);
         }
+    }
+
+    private static Database restoreBackup(Path file) throws IOException {
+        Path backupFile = backupPath(file.toAbsolutePath());
+        Database recovered = read(backupFile);
+        Files.copy(backupFile, file, StandardCopyOption.REPLACE_EXISTING);
+        return recovered;
     }
 
     private static Database read(Path file) throws IOException {

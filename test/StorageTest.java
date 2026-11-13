@@ -48,6 +48,14 @@ public final class StorageTest {
             Files.writeString(file, "broken");
             Database recovered = Storage.load(file);
             check(recovered.getTable("cars").getRows().get(0).get("model").equals("Camry"));
+            // Следующее сохранение не должно переносить повреждённый файл в резервную копию.
+            Storage.save(recovered, file);
+            Files.writeString(file, "broken again");
+            check(Storage.load(file).getTable("cars").getRows().get(0).get("model").equals("Camry"));
+            // Резервная копия доступна и при отсутствии основного файла.
+            Files.delete(file);
+            check(Storage.load(file).getTable("cars").getRows().size() == 1);
+            check(Files.exists(file));
         } finally {
             Files.deleteIfExists(file);
             Files.deleteIfExists(Path.of(file + ".tmp"));
